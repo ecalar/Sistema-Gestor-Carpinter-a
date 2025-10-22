@@ -8,6 +8,7 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 
 public class ClientesPanel extends JPanel {
     private final ClienteServicePort clienteService;
@@ -20,18 +21,24 @@ public class ClientesPanel extends JPanel {
         this.clienteService = clienteService;
 
         initializeUI();
-        cargarClientes();
+        iniciarCargaClientes();
 
     }
     private void initializeUI() {
         setLayout(new BorderLayout());
         Estilos.aplicarEstiloPanelMOderno(this);
 
+        //Panel superior
+        JPanel panelSuperior = new JPanel(new BorderLayout());
+        panelSuperior.setBackground(Estilos.COLOR_FONDO);
+        panelSuperior.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
 
         //Título
         JLabel titulo = new JLabel("GESTIÓN DE CLIENTES", SwingConstants.CENTER);
         Estilos.aplicarEstiloTitulo(titulo);
-        add(titulo, BorderLayout.NORTH);
+        panelSuperior.add(titulo, BorderLayout.NORTH);
+
+        add(panelSuperior, BorderLayout.NORTH);
 
         //Crear Tabla
         String[] columNames = {"Nª", "ID", "NOMBRE", "APELLIDOS", "TELÉFONO","CALLE", "LOCALIDAD", "ESTADO"};
@@ -88,47 +95,69 @@ public class ClientesPanel extends JPanel {
 
         add(panelCentral, BorderLayout.CENTER);
 
-        btnActualizar.addActionListener(e -> cargarClientes());
+        btnActualizar.addActionListener(e -> iniciarCargaClientes());
         btnAgregar.addActionListener(e -> abrirFormularioAgregar());
         btnEditar.addActionListener(e -> abrirFormularioEditar());
         btnEliminar.addActionListener(e -> eliminarCliente());
     }
+    private void setControlesEnabled(boolean enabled) {
+        btnAgregar.setEnabled(enabled);
+        btnEditar.setEnabled(enabled);
+        btnEliminar.setEnabled(enabled);
+        btnActualizar.setEnabled(enabled);
+    }
+    private void iniciarCargaClientes() {
+        setControlesEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        tableModel.setRowCount(0);
 
-   private void cargarClientes(){
-        //Limpiar tabla
-       tableModel.setRowCount(0);
-       try {
-           //Obtener clientes servicio
-           List<Cliente> clientes = clienteService.buscarClientesActivos();
-            int numero = 1;
-           //Llenar tabla
-           for (Cliente cliente : clientes) {
-               Object[] rowData = {
-                       numero++,
-                       cliente.getId(),
-                       cliente.getNombre(),
-                       cliente.getApellido1() + " " + (cliente.getApellido2() != null ? cliente.getApellido2() : ""),
-                       cliente.getTelefono(),
-                       cliente.getDireccion() != null ? cliente.getDireccion() : "",
-                       cliente.getLocalidad()  != null ? cliente.getLocalidad() : "",
-                       cliente.getActivo() ? "ACTIVO" : "INACTIVO"
-               };
-               tableModel.addRow(rowData);
-               }
-           System.out.println("✓ " + clientes.size() + "clientes cargados");
-           }catch (Exception e) {
-           JOptionPane.showMessageDialog(this, "Error al cargar clientes: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-       }
-   }
+        SwingWorker<List<Cliente>, Void> worker = new SwingWorker<List<Cliente>, Void>() {
+            @Override
+            protected List<Cliente> doInBackground() throws Exception {
+                return clienteService.buscarClientesActivos();
+            }
+
+            @Override
+            protected void done() {
+
+                try {
+                    //Obtener clientes servicio
+                    List<Cliente> clientes = get();
+                    int numero = 1;
+                    //Llenar tabla
+                    for (Cliente cliente : clientes) {
+                        Object[] rowData = {
+                                numero++,
+                                cliente.getId(),
+                                cliente.getNombre(),
+                                cliente.getApellido1() + " " + (cliente.getApellido2() != null ? cliente.getApellido2() : ""),
+                                cliente.getTelefono(),
+                                cliente.getDireccion() != null ? cliente.getDireccion() : "",
+                                cliente.getLocalidad() != null ? cliente.getLocalidad() : "",
+                                cliente.getActivo() ? "ACTIVO" : "INACTIVO"
+                        };
+                        tableModel.addRow(rowData);
+                    }
+                    System.out.println("✓ " + clientes.size() + "clientes cargados");
+                } catch (InterruptedException | ExecutionException e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    JOptionPane.showMessageDialog(ClientesPanel.this, "Error al cargar clientes: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    setControlesEnabled(true);
+                    setCursor(Cursor.getDefaultCursor());
+                }
+            }
+        };
+        worker.execute();
+    }
    private void abrirFormularioAgregar() {
         ClienteFormDialog dialog = new ClienteFormDialog((JFrame) SwingUtilities.getWindowAncestor(this), null, clienteService);
         dialog.setVisible(true);
-        cargarClientes();
 
         Cliente nuevoCliente = dialog.getCliente();
         if (nuevoCliente != null){
             System.out.println("Nuevo Cliente: " + nuevoCliente.getNombre());
-            cargarClientes();
+            iniciarCargaClientes();
         }
    }
    private void abrirFormularioEditar() {
@@ -149,7 +178,7 @@ public class ClientesPanel extends JPanel {
                 Cliente clienteActualizado = dialog.getCliente();
 
                 if (clienteActualizado != null) {
-                    cargarClientes();
+                    iniciarCargaClientes();
                 }
             }
         }catch (Exception e) {
@@ -168,12 +197,11 @@ public class ClientesPanel extends JPanel {
             Long clienteId = (Long) tableModel.getValueAt(selectedRow, 1);
             try {
                 clienteService.eliminarCliente(clienteId);
-                cargarClientes();
                 JOptionPane.showMessageDialog(this, "Cliente eliminado correctamente", "Éxito", JOptionPane.INFORMATION_MESSAGE);
+                iniciarCargaClientes();
             }catch (Exception e) {
                 JOptionPane.showMessageDialog(this, "Error al eliminar cliente: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
-            cargarClientes();
         }
    }
 }

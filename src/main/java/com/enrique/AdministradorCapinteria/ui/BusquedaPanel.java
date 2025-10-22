@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 
 public class BusquedaPanel extends JPanel {
@@ -22,7 +23,7 @@ public class BusquedaPanel extends JPanel {
     public BusquedaPanel(EncargoServicePort encargoService) {
         this.encargoService = encargoService;
         initializeUI();
-        cargarTodosLosEncargos();
+        iniciarCargaTodosLosEncargos();
     }
 
     private void initializeUI() {
@@ -90,10 +91,9 @@ public class BusquedaPanel extends JPanel {
         JScrollPane scrollPane = new JScrollPane(tablaFacturacion);
         add(scrollPane, BorderLayout.CENTER);
 
-        //Panel superior
-        JPanel panelSuperior = new JPanel(new BorderLayout());
-        panelSuperior.setBackground(Estilos.COLOR_FONDO);
-        add(scrollPane, BorderLayout.CENTER);
+        //Panel controles
+        JPanel panelInferior = new JPanel(new BorderLayout());
+        panelInferior.setBackground(Estilos.COLOR_FONDO);
 
         //Panel de busqueda
         JPanel panelBusqueda = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
@@ -128,23 +128,50 @@ public class BusquedaPanel extends JPanel {
         Estilos.aplicarEstiloBotonModerno(btnMarcarPagado);
         Estilos.aplicarEstiloBotonModerno(btnActualizar);
 
-        panelSuperior.add(panelBusqueda, BorderLayout.WEST);
-        panelSuperior.add(panelBotones, BorderLayout.EAST);
-        panelSuperior.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        add(panelSuperior, BorderLayout.SOUTH);
+        panelInferior.add(panelBusqueda, BorderLayout.WEST);
+        panelInferior.add(panelBotones, BorderLayout.EAST);
+        panelInferior.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        add(panelInferior, BorderLayout.SOUTH);
 
         //Eventos
-        btnActualizar.addActionListener(e -> cargarTodosLosEncargos());
+        btnActualizar.addActionListener(e -> iniciarCargaTodosLosEncargos());
         btnMarcarPagado.addActionListener(e -> marcarComoPagado());
-        btnBuscar.addActionListener(e -> buscarEncargos());
-        txtBusqueda.addActionListener(e -> buscarEncargos());//Buscar al pulsar Enter
+        btnBuscar.addActionListener(e -> iniciarBusquedaEncargos());
+        txtBusqueda.addActionListener(e -> iniciarBusquedaEncargos());//Buscar al pulsar Enter
         btnAyuda.addActionListener(e -> mostrarAyudaBusqueda());
     }
 
-    private void cargarTodosLosEncargos() {
-        cargarEncargos(encargoService.buscarTodos());
+    private void setControlesEnabled(boolean enabled) {
+        btnBuscar.setEnabled(enabled);
+        btnActualizar.setEnabled(enabled);
+        btnMarcarPagado.setEnabled(enabled);
+        txtBusqueda.setEnabled(enabled);
     }
-    private void cargarEncargos(List<Encargo> encargos) {
+    private void iniciarCargaTodosLosEncargos() {
+        setControlesEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        SwingWorker<List<Encargo>, Void> worker = new SwingWorker<List<Encargo>, Void>() {
+            @Override
+            protected List<Encargo> doInBackground() throws Exception {
+                return encargoService.buscarTodos();
+            }
+            @Override
+            protected void done() {
+                try {
+                    List<Encargo> encargos = get();
+                    cargarEncargosEnTabla(encargos);
+                }catch (InterruptedException | ExecutionException e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    JOptionPane.showMessageDialog(BusquedaPanel.this, "Error al cargar encargos: " + cause.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }finally {
+                    setControlesEnabled(true);
+                    setCursor(Cursor.getDefaultCursor());
+                }
+            }
+        };
+        worker.execute();
+    }
+    private void cargarEncargosEnTabla(List<Encargo> encargos) {
         tableModel.setRowCount(0);
         try {
             int numero = 1;
@@ -167,66 +194,82 @@ public class BusquedaPanel extends JPanel {
             JOptionPane.showMessageDialog(this, "Error al cargar encargos: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
-    private void buscarEncargos() {
+    private void iniciarBusquedaEncargos() {
         String busqueda = txtBusqueda.getText().trim().toLowerCase();
         if (busqueda.isEmpty()) {
-            cargarTodosLosEncargos();
+            iniciarCargaTodosLosEncargos();
             return;
         }
-        try {
-            List<Encargo> todosEncargos = encargoService.buscarTodos();
-            List<Encargo> encargosFiltrados = new ArrayList<>();
+        setControlesEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
 
-            for (Encargo encargo : todosEncargos) {
-                boolean coincideCliente = false;
-                boolean coincideDescripcion = false;
-                boolean coincideTipoMueble = false;
-                boolean coincideTipoMadera = false;
-                boolean coincideEstado = false;
-                boolean coincideEstadoPago = false;
-                boolean coincideId;
+        SwingWorker<List<Encargo>, Void> worker = new SwingWorker<List<Encargo>, Void>() {
+            @Override
+            protected List<Encargo> doInBackground() throws Exception {
+                List<Encargo> todosEncargos = encargoService.buscarTodos();
+                List<Encargo> encargosFiltrados = new ArrayList<>();
+
+                for (Encargo encargo : todosEncargos) {
+                    boolean coincideCliente = false;
+                    boolean coincideDescripcion = false;
+                    boolean coincideTipoMueble = false;
+                    boolean coincideTipoMadera = false;
+                    boolean coincideEstado = false;
+                    boolean coincideEstadoPago = false;
+                    boolean coincideId;
 
 
-                if (encargo.getCliente() != null) {
-                    String nombreCliente = encargo.getCliente().getNombre().toLowerCase();
-                    String apellido1Cliente = encargo.getCliente().getApellido1().toLowerCase();
-                    String apellido2Cliente = encargo.getCliente().getApellido2() != null ? encargo.getCliente().getApellido2().toLowerCase() : "";
-                    coincideCliente = nombreCliente.contains(busqueda)
-                            || apellido1Cliente.contains(busqueda)
-                            || apellido2Cliente.contains(busqueda);
-                }
-                if (encargo.getDescripcion() != null) {
-                    coincideDescripcion = encargo.getDescripcion().toLowerCase().contains(busqueda);
-                }
-                if (encargo.getTipoMueble() != null) {
-                    coincideTipoMueble = encargo.getTipoMueble().toLowerCase().contains(busqueda);
-                }
-                if (encargo.getTipoMadera() != null) {
-                    coincideTipoMadera = encargo.getTipoMadera().toLowerCase().contains(busqueda);
-                }
-                if (encargo.getEstado() != null) {
-                    coincideEstado = encargo.getEstado().toString().toLowerCase().contains(busqueda);
-                }
-                if (encargo.getEstadoPago() != null) {
-                    coincideEstadoPago = encargo.getEstadoPago().toString().toLowerCase().contains(busqueda);
-                }
+                    if (encargo.getCliente() != null) {
+                        String nombreCliente = encargo.getCliente().getNombre().toLowerCase();
+                        String apellido1Cliente = encargo.getCliente().getApellido1().toLowerCase();
+                        String apellido2Cliente = encargo.getCliente().getApellido2() != null ? encargo.getCliente().getApellido2().toLowerCase() : "";
+                        coincideCliente = nombreCliente.contains(busqueda)
+                                || apellido1Cliente.contains(busqueda)
+                                || apellido2Cliente.contains(busqueda);
+                    }
+                    if (encargo.getDescripcion() != null) {
+                        coincideDescripcion = encargo.getDescripcion().toLowerCase().contains(busqueda);
+                    }
+                    if (encargo.getTipoMueble() != null) {
+                        coincideTipoMueble = encargo.getTipoMueble().toLowerCase().contains(busqueda);
+                    }
+                    if (encargo.getTipoMadera() != null) {
+                        coincideTipoMadera = encargo.getTipoMadera().toLowerCase().contains(busqueda);
+                    }
+                    if (encargo.getEstado() != null) {
+                        coincideEstado = encargo.getEstado().toString().toLowerCase().contains(busqueda);
+                    }
+                    if (encargo.getEstadoPago() != null) {
+                        coincideEstadoPago = encargo.getEstadoPago().toString().toLowerCase().contains(busqueda);
+                    }
 
-                coincideId = String.valueOf(encargo.getId()).contains(busqueda);
-                boolean coincideTotal = coincideCliente
-                        || coincideDescripcion
-                        || coincideTipoMueble
-                        || coincideTipoMadera
-                        || coincideEstado
-                        || coincideEstadoPago
-                        || coincideId;
-                if (coincideTotal) {
-                    encargosFiltrados.add(encargo);
+                    coincideId = String.valueOf(encargo.getId()).contains(busqueda);
+                    boolean coincideTotal = coincideCliente
+                            || coincideDescripcion
+                            || coincideTipoMueble
+                            || coincideTipoMadera
+                            || coincideEstado
+                            || coincideEstadoPago
+                            || coincideId;
+                    if (coincideTotal) {
+                        encargosFiltrados.add(encargo);
+                    }
+                }
+                return encargosFiltrados;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<Encargo> encargosFiltrados = get();
+                    cargarEncargosEnTabla(encargosFiltrados);
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    JOptionPane.showMessageDialog(BusquedaPanel.this, "Error en la búsqueda: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
-            cargarEncargos(encargosFiltrados);
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error en la búsqueda: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
+        };
+        worker.execute();
     }
     private void marcarComoPagado() {
         int selectedRow = tablaFacturacion.getSelectedRow();
@@ -240,15 +283,35 @@ public class BusquedaPanel extends JPanel {
 
         int confirm = JOptionPane.showConfirmDialog(this, "¿Marcar como PAGADO en encargo:\n" + descripcion + "?", "Confirmar Pago", JOptionPane.YES_NO_OPTION);
         if (confirm == JOptionPane.YES_OPTION) {
-            try {
-                encargoService.marcarComoPagado(encargoId, LocalDate.now());
-                cargarTodosLosEncargos();
-                JOptionPane.showMessageDialog(this, "Encargo marcado como PAGADO", "Exito", JOptionPane.INFORMATION_MESSAGE);
-            } catch (Exception e) {
-                JOptionPane.showMessageDialog(this, "Error al marcar como PAGADO: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            }
-            cargarTodosLosEncargos();
+        iniciarMarcarComoPagado(encargoId);
+
         }
+    }
+    private void iniciarMarcarComoPagado(Long encargoId) {
+        setControlesEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                encargoService.marcarComoPagado(encargoId, LocalDate.now());
+                return null;
+            }
+            @Override
+            protected void done() {
+                try {
+                    get();
+                    JOptionPane.showMessageDialog(BusquedaPanel.this, "Encargo marcardo como PAGADO", "EXITO", JOptionPane.INFORMATION_MESSAGE);
+                    iniciarCargaTodosLosEncargos();
+                }catch (InterruptedException | ExecutionException e) {
+                    Throwable cause = e.getCause() != null ? e.getCause(): e;
+                    JOptionPane.showMessageDialog(BusquedaPanel.this, "Error al marcar como PAGADO: " + cause.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }finally {
+                    setControlesEnabled(true);
+                    setCursor(Cursor.getDefaultCursor());
+                }
+            }
+        };
+        worker.execute();
     }
     private void mostrarAyudaBusqueda() {
         String mensajeAyuda =

@@ -4,13 +4,12 @@ import com.enrique.AdministradorCapinteria.domain.model.Encargo;
 import com.enrique.AdministradorCapinteria.domain.model.enums.EstadoEncargo;
 import com.enrique.AdministradorCapinteria.domain.ports.in.EncargoServicePort;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cglib.core.Local;
-
 import javax.swing.*;
 import java.awt.*;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 @Slf4j
 public class CalendarioPanel extends JPanel {
@@ -20,11 +19,19 @@ public class CalendarioPanel extends JPanel {
     private YearMonth mesActual;
     private JButton btnAnterior, btnSiguiente, btnHoy;
 
+    private static class CalendarioData {
+        final List<Encargo> encargos;
+        final long totalAtrasados;
+        CalendarioData(List<Encargo> encargos, long totalAtrasados) {
+            this.encargos = encargos;
+            this.totalAtrasados = totalAtrasados;
+        }
+    }
     public CalendarioPanel(EncargoServicePort encargoService) {
         this.encargoService = encargoService;
         this.mesActual = YearMonth.now();
         initializeUI();
-        actualizarCalendario();
+        iniciarActualizacionCalendario();
     }
     private void initializeUI() {
         setLayout(new BorderLayout());
@@ -83,18 +90,27 @@ public class CalendarioPanel extends JPanel {
         //Eventos
         btnAnterior.addActionListener(e -> {
             mesActual = mesActual.minusMonths(1);
-            actualizarCalendario();
+            iniciarActualizacionCalendario();
         });
         btnSiguiente.addActionListener(e -> {
             mesActual = mesActual.plusMonths(1);
-            actualizarCalendario();
+            iniciarActualizacionCalendario();
         });
         btnHoy.addActionListener(e -> {
             mesActual = YearMonth.now();
-            actualizarCalendario();
+            iniciarActualizacionCalendario();
         });
     }
-    private void actualizarCalendario() {
+
+    private void setControlesEnabled(boolean enabled) {
+        btnHoy.setEnabled(enabled);
+        btnSiguiente.setEnabled(enabled);
+        btnAnterior.setEnabled(enabled);
+    }
+    private void iniciarActualizacionCalendario() {
+        setControlesEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+
         String[] meses = {"ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"};
         lblMesAnio.setText(meses[mesActual.getMonthValue() - 1]+" "+mesActual.getYear());
 
@@ -111,27 +127,43 @@ public class CalendarioPanel extends JPanel {
                     lblDia.setOpaque(true);
                     panelCalendario.add(lblDia);
                 }
-                //Obtener encargos para mes actual
-        List<Encargo> encargos = encargoService.buscarTodos();
-        LocalDate primerDia = mesActual.atDay(1);
-        LocalDate ultimoDia = mesActual.atEndOfMonth();
-        //Espacios en blanco para dias anteriores al primer dia del mes
-        int diaSemanaInicio = primerDia.getDayOfWeek().getValue() - 1;
-        for (int i = 0; i < diaSemanaInicio; i++) {
-            panelCalendario.add(new JLabel(""));
-        }
-        //Dias del mes
-        for (int dia = 1; dia <= mesActual.lengthOfMonth(); dia++) {
-            LocalDate fecha = mesActual.atDay(dia);
-            JPanel panelDia = crearPanelDia(fecha, dia, encargos);
-            panelCalendario.add(panelDia);
-        }
-
-        //Actualizar interfaz
-        panelCalendario.revalidate();
-        panelCalendario.repaint();
+                SwingWorker<CalendarioData, Void> worker = new SwingWorker<CalendarioData, Void>() {
+                    @Override
+                    protected CalendarioData doInBackground() throws Exception {
+                        List<Encargo> encargos = encargoService.buscarTodos();
+                        long totalAtrasados = encargos.stream()
+                                .filter(e -> e.getFechaEntrega() != null && e.getFechaEntrega().isBefore(LocalDate.now()) && e.getEstado() != EstadoEncargo.ENTREGADO)
+                                .count();
+                        return new CalendarioData(encargos, totalAtrasados);
+                    }
+                    @Override
+                    protected void done() {
+                        try {
+                            CalendarioData data = get();
+                            LocalDate primerDia = mesActual.atDay(1);
+                            int diaSemanaInicio = primerDia.getDayOfWeek().getValue() - 1;
+                            for (int i = 0; i < diaSemanaInicio; i++) {
+                                panelCalendario.add(new JLabel(""));
+                            }
+                            for (int dia = 1; dia <= mesActual.lengthOfMonth(); dia++) {
+                                LocalDate fecha = mesActual.atDay(dia);
+                                JPanel panelDia = crearPanelDia(fecha, dia, data.encargos, data.totalAtrasados);
+                                panelCalendario.add(panelDia);
+                            }
+                            panelCalendario.revalidate();
+                            panelCalendario.repaint();
+                        }catch (InterruptedException | ExecutionException e) {
+                            Throwable cause = e.getCause() != null ? e.getCause() : e;
+                            JOptionPane.showMessageDialog(CalendarioPanel.this, "Error al actualizar calendario;" + cause.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                        }finally {
+                            setControlesEnabled(true);
+                            setCursor(Cursor.getDefaultCursor());
+                        }
+                    }
+                };
+                worker.execute();
     }
-    private JPanel crearPanelDia(LocalDate fecha, int dia, List<Encargo>  encargos) {
+    private JPanel crearPanelDia(LocalDate fecha, int dia, List<Encargo>  encargos, long atrasados) {
         JPanel panelDia = new JPanel(new BorderLayout());
         panelDia.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
         panelDia.setBackground(Color.WHITE);
@@ -161,24 +193,27 @@ public class CalendarioPanel extends JPanel {
         }
 
         //Verificar encargos atrasados (fecha pasada y no entregado)
-        long atrasados = encargos.stream()
-                .filter(e -> e.getFechaEntrega() != null && e.getFechaEntrega().isBefore(LocalDate.now()) && e.getEstado() != EstadoEncargo.ENTREGADO)
-                .count();
+
+        if (encargosHoy > 0) {
+            JLabel lblEncargos = new JLabel("Encargos: " + encargosHoy);
+            lblEncargos.setFont(new Font("Arial", Font.PLAIN, 10));
+            lblEncargos.setForeground(new Color(0, 100, 0));
+            panelEncargos.add(lblEncargos);
+        }
         if (atrasados > 0 && fecha.equals(LocalDate.now())) {
             JLabel lblAtrasados = new JLabel("Atrasados" + atrasados);
             lblAtrasados.setFont(new Font("Arial", Font.PLAIN, 10));
             lblAtrasados.setForeground(Color.RED);
             panelEncargos.add(lblAtrasados);
         }
-
         panelDia.add(lblNumero, BorderLayout.NORTH);
         panelDia.add(panelEncargos, BorderLayout.CENTER);
-
         //Tooltip con detalles
         if (encargosHoy > 0) {
-            StringBuilder tooltip = new StringBuilder("Entregas para " + fecha + ":\n");
+            StringBuilder tooltip = new StringBuilder("<html>Entregas para " + fecha + ":<br>");
             encargos.stream().filter(e -> e.getFechaEntrega() != null && e.getFechaEntrega().equals(fecha))
-                    .forEach(e -> tooltip.append("- ").append(e.getDescripcion()).append("\n"));
+                    .forEach(e -> tooltip.append("- ").append(e.getDescripcion()).append("<br>"));
+            tooltip.append("</html>");
             panelDia.setToolTipText(tooltip.toString());
         }
         return panelDia;

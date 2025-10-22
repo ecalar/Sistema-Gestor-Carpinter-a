@@ -10,6 +10,7 @@ import com.enrique.AdministradorCapinteria.domain.ports.in.MaterialServicePort;
 import javax.swing.*;
 import java.awt.*;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 public class DashboardPanel extends JPanel {
     private final ClienteServicePort clienteService;
@@ -17,12 +18,21 @@ public class DashboardPanel extends JPanel {
     private final MaterialServicePort materialService;
     private JButton btnActualizar;
 
+    private static class EstadisticasData {
+        int clientesActivos;
+        int encargosActivos;
+        int encargosTerminados;
+        int pendientesPago;
+        int totalMateriales;
+        int stockBajo;
+    }
+
     public DashboardPanel(ClienteServicePort clienteService, EncargoServicePort encargoService, MaterialServicePort materialService) {
         this.clienteService = clienteService;
         this.encargoService = encargoService;
         this.materialService = materialService;
         initializeUI();
-        cargarEstadisticas();
+        iniciarCargaEstadisticas();
     }
     private void initializeUI() {
         setLayout(new BorderLayout());
@@ -31,7 +41,6 @@ public class DashboardPanel extends JPanel {
         //Titulo
         JLabel titulo = new JLabel("VISTA GENERAL", SwingConstants.CENTER);
         Estilos.aplicarEstiloTitulo(titulo);
-        add(titulo, BorderLayout.NORTH);
 
         titulo.setFont(new Font("Arial", Font.BOLD, 20));
         titulo.setBorder(BorderFactory.createEmptyBorder(15, 0, 15, 0));
@@ -58,7 +67,7 @@ public class DashboardPanel extends JPanel {
         panelBoton.add(btnActualizar);
         add(panelBoton, BorderLayout.SOUTH);
 
-        btnActualizar.addActionListener(e -> cargarEstadisticas());
+        btnActualizar.addActionListener(e -> iniciarCargaEstadisticas());
 
 
     }
@@ -80,41 +89,57 @@ public class DashboardPanel extends JPanel {
 
         return panel;
     }
+    private void setControlesEnabled(boolean enabled) {
+        btnActualizar.setEnabled(enabled);
+    }
 
-    private void cargarEstadisticas() {
-        try {
-            //Clientes activos
-            int clientesActivos = clienteService.buscarClientesActivos().size();
-            //Encargos Activos(No entregados)
-            List<Encargo> todosEncargos = encargoService.buscarTodos();
-            int encargosActivos = (int) todosEncargos.stream().
-                    filter(e -> e.getEstado() != EstadoEncargo.ENTREGADO).count();
-            //Encargos terminados
-            int encargosTerminados = (int) todosEncargos.stream()
-                    .filter(e -> e.getEstado() == EstadoEncargo.TERMINADO)
-                    .count();
-            //Pendientes de pago
-            int pendientesPago = (int) todosEncargos.stream()
-                    .filter(e -> e.getEstadoPago() == EstadoPago.PENDIENTE)
-                    .count();
-            //Total materiales en stock
-            int totalMateriales = materialService.buscarTodos().size();
-            //Materiales con stock bajo(<10)
-            int stockBajo = (int) materialService.buscarTodos().stream()
-                    .filter(m -> m.getStock() < 10)
-                    .count();
-            //Actualizar la interfaz
-            actualizarPanelEstadistica(0, String.valueOf(clientesActivos));
-            actualizarPanelEstadistica(1, String.valueOf(encargosActivos));
-            actualizarPanelEstadistica(2, String.valueOf(encargosTerminados));
-            actualizarPanelEstadistica(3, String.valueOf(pendientesPago));
-            actualizarPanelEstadistica(4, String.valueOf(totalMateriales));
-            actualizarPanelEstadistica(5, String.valueOf(stockBajo));
+    private void iniciarCargaEstadisticas() {
+        setControlesEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        SwingWorker<EstadisticasData, Void> worker = new SwingWorker<EstadisticasData, Void>() {
+            @Override
+            protected EstadisticasData doInBackground() throws Exception {
+                EstadisticasData data = new EstadisticasData();
+                data.clientesActivos = clienteService.buscarClientesActivos().size();
+                List<Encargo> todosEncargos = encargoService.buscarTodos();
+                data.encargosActivos = (int) todosEncargos.stream().
+                        filter(e -> e.getEstado() != EstadoEncargo.ENTREGADO).count();
+                data.encargosTerminados = (int) todosEncargos.stream().
+                        filter(e -> e.getEstado() == EstadoEncargo.TERMINADO).
+                        count();
+                data.pendientesPago = (int) todosEncargos.stream()
+                        .filter(e -> e.getEstadoPago() == EstadoPago.PENDIENTE)
+                        .count();
+                List<com.enrique.AdministradorCapinteria.domain.model.Material> todosMateriales = materialService.buscarTodos();
+                data.totalMateriales = todosMateriales.size();
+                data.stockBajo = (int) todosMateriales.stream()
+                        .filter(m -> m.getStock() < 10)
+                        .count();
+                return data;
+            }
 
-            System.out.println("✓ Dashboard actualizado");
-        }catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error al cargar estadísticas: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
+            @Override
+            protected void done() {
+                try {
+                    EstadisticasData data = get();
+                    actualizarPanelEstadistica(0, String.valueOf(data.clientesActivos));
+                    actualizarPanelEstadistica(1, String.valueOf(data.encargosActivos));
+                    actualizarPanelEstadistica(2, String.valueOf(data.encargosTerminados));
+                    actualizarPanelEstadistica(3, String.valueOf(data.pendientesPago));
+                    actualizarPanelEstadistica(4, String.valueOf(data.totalMateriales));
+                    actualizarPanelEstadistica(5, String.valueOf(data.stockBajo));
+
+                    System.out.println("✓ Dashboard actualizado");
+                } catch (InterruptedException | ExecutionException e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    JOptionPane.showMessageDialog(DashboardPanel.this, "Error al cargar estadísticas: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    setControlesEnabled(true);
+                    setCursor(Cursor.getDefaultCursor());
+                }
+            }
+        };
+        worker.execute();
     }
 
     private void actualizarPanelEstadistica(int indice, String valor) {

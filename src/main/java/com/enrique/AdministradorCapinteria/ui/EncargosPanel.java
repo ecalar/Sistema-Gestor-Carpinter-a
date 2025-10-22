@@ -7,11 +7,11 @@ import com.enrique.AdministradorCapinteria.domain.ports.in.EncargoServicePort;
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
-import javax.swing.table.TableColumnModel;
 import java.awt.*;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 
 public class EncargosPanel extends JPanel {
     private final EncargoServicePort encargoService;
@@ -25,7 +25,7 @@ public class EncargosPanel extends JPanel {
         this.encargoService = encargoService;
         this.clienteService = clienteService;
         initializeUI();
-        cargarEncargos();
+        iniciarCargaEncargos();
     }
 
     private void initializeUI() {
@@ -128,13 +128,61 @@ public class EncargosPanel extends JPanel {
         add(panelCentral, BorderLayout.CENTER);
 
         //Eventos
-        btnActualizar.addActionListener(e -> cargarEncargos());
+        btnActualizar.addActionListener(e -> iniciarCargaEncargos());
         btnAgregar.addActionListener(e -> abrirFormularioAgregar());
         btnEditar.addActionListener(e -> abrirFormularioEditar());
         btnEliminar.addActionListener(e -> eliminarEncargo());
     }
 
-    private void cargarEncargos() {
+    private void setBotonesEnabled(boolean enabled) {
+        btnAgregar.setEnabled(enabled);
+        btnEditar.setEnabled(enabled);
+        btnEliminar.setEnabled(enabled);
+        btnActualizar.setEnabled(enabled);
+    }
+    private void iniciarCargaEncargos() {
+        setBotonesEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        tableModel.setRowCount(0);
+
+        SwingWorker<List<Encargo>, Void> worker = new SwingWorker<List<Encargo>, Void>() {
+            @Override
+            protected List<Encargo> doInBackground() throws Exception {
+                Thread.sleep(2000);
+                return encargoService.buscarTodos();
+            }
+            @Override
+            protected void done() {
+                try {
+                    List<Encargo> encargos = get();
+                    int numero = 1;
+                    for (Encargo encargo : encargos) {
+                        Object[] rowData = {
+                                numero++,
+                                encargo.getId(),
+                                encargo.getCliente() != null ? encargo.getCliente().getNombre() + " " + encargo.getCliente().getApellido1() : "N/A",
+                                encargo.getDescripcion(),
+                                encargo.getTipoMueble(),
+                                String.format("€%.2f", encargo.getPrecio()),
+                                encargo.getEstado(),
+                                encargo.getEstadoPago(),
+                                encargo.getFechaEncargo() != null ? encargo.getFechaEncargo().format(dateFormatter) : "N/A"
+                        };
+                        tableModel.addRow(rowData);
+                    }
+                    System.out.println("✓ " + encargos.size() + " encargos cargados");
+                }catch (InterruptedException | ExecutionException e) {
+                    Throwable cause = e.getCause() !=  null ? e.getCause() : e;
+                    JOptionPane.showMessageDialog(EncargosPanel.this, "Error al cargar encargos: " + cause.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }finally {
+                    setBotonesEnabled(true);
+                    setCursor(Cursor.getDefaultCursor());
+                }
+            }
+        };
+        worker.execute();
+    }
+    /* private void cargarEncargos() {
         tableModel.setRowCount(0);
         try {
             List<Encargo> encargos = encargoService.buscarTodos();
@@ -158,16 +206,15 @@ public class EncargosPanel extends JPanel {
             JOptionPane.showMessageDialog(this, "Error al cargar encargos: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
-
+*/
     private void abrirFormularioAgregar() {
         EncargoFormDialog dialog = new EncargoFormDialog((JFrame) SwingUtilities.getWindowAncestor(this), null, encargoService, clienteService);
         dialog.setVisible(true);
-        cargarEncargos();
 
         Encargo nuevoEncargo = dialog.getEncargo();
         if (nuevoEncargo != null) {
             System.out.println("Nuevo Encago creado: " + nuevoEncargo.getDescripcion());
-            cargarEncargos();
+            iniciarCargaEncargos();
         }
     }
 
@@ -187,7 +234,7 @@ public class EncargosPanel extends JPanel {
 
             Encargo encargoActualizado = dialog.getEncargo();
             if (encargoActualizado != null) {
-                cargarEncargos();
+                iniciarCargaEncargos();
             }
             }else {
                 JOptionPane.showMessageDialog(this, "Encargo no encontrado", "Error", JOptionPane.ERROR_MESSAGE);
@@ -214,12 +261,11 @@ public class EncargosPanel extends JPanel {
             if (confirm == JOptionPane.YES_OPTION) {
                 try {
                     encargoService.eliminarEncargo(encargoId);
-                    cargarEncargos();
+                    iniciarCargaEncargos();
                     JOptionPane.showMessageDialog(this, "Encargo eliminado correctamente", "Exito", JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(this, "Error al eliminar encargo: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
-                cargarEncargos();
             }
         }
     }

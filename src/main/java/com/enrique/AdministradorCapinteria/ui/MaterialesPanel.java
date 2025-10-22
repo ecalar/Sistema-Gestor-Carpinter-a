@@ -2,13 +2,13 @@ package com.enrique.AdministradorCapinteria.ui;
 
 import com.enrique.AdministradorCapinteria.domain.model.Material;
 import com.enrique.AdministradorCapinteria.domain.ports.in.MaterialServicePort;
-
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 
 public class MaterialesPanel extends JPanel {
     private final MaterialServicePort materialService;
@@ -20,7 +20,7 @@ public class MaterialesPanel extends JPanel {
     public MaterialesPanel(MaterialServicePort materialService) {
         this.materialService = materialService;
         initializeUI();
-        cargarMateriales();
+        iniciarCargaMateriales();
     }
 
     private void initializeUI() {
@@ -99,19 +99,45 @@ public class MaterialesPanel extends JPanel {
         btnAgregar.addActionListener(e -> abrirFormularioAgregar());
         btnEditar.addActionListener(e -> abrirFormularioEditar());
         btnEliminar.addActionListener(e -> eliminarMaterial());
-        btnActualizar.addActionListener(e -> cargarMateriales());
-        btnBuscar.addActionListener(e -> buscarMateriales());
-        txtBusqueda.addActionListener(e -> buscarMateriales());
+        btnActualizar.addActionListener(e -> iniciarCargaMateriales());
+        btnBuscar.addActionListener(e -> iniciarBusquedaMateriales());
+        txtBusqueda.addActionListener(e -> iniciarBusquedaMateriales());
     }
 
-    private void cargarMateriales() {
+    //Metodo para habilitar/deshabilitar coontroles
+    private void setControlesEnabled(boolean enabled) {
+        btnAgregar.setEnabled(enabled);
+        btnEditar.setEnabled(enabled);
+        btnEliminar.setEnabled(enabled);
+        btnActualizar.setEnabled(enabled);
+        btnBuscar.setEnabled(enabled);
+        txtBusqueda.setEnabled(enabled);
+    }
+    private void iniciarCargaMateriales() {
+        setControlesEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         tableModel.setRowCount(0);
-        try {
-            List<Material> materiales = materialService.buscarTodos();
-            cargarMaterialesEnTabla(materiales);
-        }catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error al cargar materiales: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
+
+        SwingWorker<List<Material>, Void> worker = new SwingWorker<List<Material>, Void>() {
+            @Override
+            protected List<Material> doInBackground() throws Exception {
+                return materialService.buscarTodos();
+            }
+            @Override
+            protected void done () {
+                try {
+                    List<Material> materials = get();
+                    cargarMaterialesEnTabla(materials);
+                }catch (InterruptedException | ExecutionException e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    JOptionPane.showMessageDialog(MaterialesPanel.this, "Error al cargar materiales " + cause.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }finally {
+                    setControlesEnabled(true);
+                    setCursor(Cursor.getDefaultCursor());
+                }
+            }
+        };
+        worker.execute();
     }
 
     private void abrirFormularioAgregar() {
@@ -121,7 +147,7 @@ public class MaterialesPanel extends JPanel {
         Material nuevoMaterial = dialog.getMaterial();
         if (nuevoMaterial != null) {
             System.out.println("Nuevo Material: " + nuevoMaterial.getNombre());
-            cargarMateriales();
+            iniciarCargaMateriales();
         }
     }
 
@@ -141,7 +167,7 @@ public class MaterialesPanel extends JPanel {
 
                 Material materialActualizado = dialog.getMaterial();
                 if (materialActualizado != null) {
-                    cargarMateriales();
+                    iniciarCargaMateriales();
                 }
             }else {
                 JOptionPane.showMessageDialog(this, "Material no encontrado", "Error", JOptionPane.ERROR_MESSAGE);
@@ -165,7 +191,7 @@ public class MaterialesPanel extends JPanel {
         if (confirm == JOptionPane.YES_OPTION) {
             try {
                 materialService.eliminarMaterial(materialId);
-                cargarMateriales();
+                iniciarCargaMateriales();
                 JOptionPane.showMessageDialog(this, "Material eliminado correctamente", "Exito", JOptionPane.INFORMATION_MESSAGE);
             }catch (Exception e) {
                 JOptionPane.showMessageDialog(this, "Error al eliminar material: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -173,50 +199,71 @@ public class MaterialesPanel extends JPanel {
         }
     }
 
-    private void buscarMateriales() {
+    private void iniciarBusquedaMateriales() {
         String textoBusqueda = txtBusqueda.getText().trim().toLowerCase();
 
         if (textoBusqueda.isEmpty()) {
-            cargarMateriales();
+            iniciarCargaMateriales();
             return;
         }
-        try {
-            List<Material> todosMateriales = materialService.buscarTodos();
-            List<Material> materialesFiltrados = new ArrayList<>();
 
-            for (Material material : todosMateriales) {
-                boolean coincideNombre = false;
-                boolean coincideTipo = false;
-                boolean coincideUnidad = false;
-                boolean coincideId = false;
+        setControlesEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        tableModel.setRowCount(0);
 
-                //Buscar en nombre
-                if (material.getNombre() != null) {
-                    coincideNombre = material.getNombre().toLowerCase().contains(textoBusqueda);
+        SwingWorker<List<Material>, Void> worker = new SwingWorker<List<Material>, Void>() {
+            @Override
+            protected List<Material> doInBackground() throws Exception {
+                List<Material> todosMateriales = materialService.buscarTodos();
+                List<Material> materialesFiltrados = new ArrayList<>();
+
+                for (Material material : todosMateriales) {
+                    boolean coincideNombre = false;
+                    boolean coincideTipo = false;
+                    boolean coincideUnidad = false;
+                    boolean coincideId = false;
+
+                    //Buscar en nombre
+                    if (material.getNombre() != null) {
+                        coincideNombre = material.getNombre().toLowerCase().contains(textoBusqueda);
+                    }
+                    //Buscar tipo
+                    if (material.getTipo() != null) {
+                        coincideTipo = material.getTipo().toString().toLowerCase().contains(textoBusqueda);
+                    }
+                    //Buscar unidad medida
+                    if (material.getUnidadMedida() != null) {
+                        coincideUnidad = material.getUnidadMedida().toString().toLowerCase().contains(textoBusqueda);
+                    }
+                    //Buscar Id
+                    coincideId = String.valueOf(material.getId()).contains(textoBusqueda);
+                    //Coincide si cumple uno de los criterios
+                    boolean coincideTotal = coincideNombre
+                            || coincideTipo
+                            || coincideUnidad
+                            || coincideId;
+                    if (coincideTotal) {
+                        materialesFiltrados.add(material);
+                    }
                 }
-                //Buscar Tipo
-                if (material.getTipo() != null) {
-                    coincideTipo = material.getTipo().toString().toLowerCase().contains(textoBusqueda);
-                }
-                //Buscar unidad medida
-                if (material.getUnidadMedida() != null) {
-                    coincideUnidad = material.getUnidadMedida().toString().toLowerCase().contains(textoBusqueda);
-                }
-                //Buscar Id
-                coincideId = String.valueOf(material.getId()).contains(textoBusqueda);
-                //Coincide si cumple uno de los criterios
-                boolean coincideTotal = coincideNombre
-                        || coincideTipo
-                        || coincideUnidad
-                        ||coincideId;
-                if (coincideTotal) {
-                    materialesFiltrados.add(material);
+                return materialesFiltrados;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<Material> materialesFiltrados = get();
+                    cargarMaterialesEnTabla(materialesFiltrados);
+                } catch (InterruptedException | ExecutionException e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    JOptionPane.showMessageDialog(MaterialesPanel.this, "Error en la búsqueda: " + cause.getMessage() + "Error" + JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    setControlesEnabled(true);
+                    setCursor(Cursor.getDefaultCursor());
                 }
             }
-            cargarMaterialesEnTabla(materialesFiltrados);
-        }catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error en la búsqueda: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
+        };
+        worker.execute();
     }
 
     private void cargarMaterialesEnTabla(List<Material> materiales) {
