@@ -105,11 +105,13 @@ public class BusquedaPanel extends JPanel {
         btnBuscar = new JButton("Buscar");
         Estilos.aplicarEstiloBotonSecundario(btnBuscar);
         panelBusqueda.add(btnBuscar);
+        Estilos.aplicarEstiloBotonModerno(btnBuscar);
 
         //Boton de ayuda
         JButton btnAyuda = new JButton("?");
         btnAyuda.setToolTipText("Mostrar ayuda de búsqueda");
         panelBusqueda.add(btnAyuda);
+        Estilos.aplicarEstiloBotonModerno(btnAyuda);
 
         //Panel botones
         JPanel panelBotones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
@@ -122,6 +124,9 @@ public class BusquedaPanel extends JPanel {
 
         panelBotones.add(btnMarcarPagado);
         panelBotones.add(btnActualizar);
+
+        Estilos.aplicarEstiloBotonModerno(btnMarcarPagado);
+        Estilos.aplicarEstiloBotonModerno(btnActualizar);
 
         panelSuperior.add(panelBusqueda, BorderLayout.WEST);
         panelSuperior.add(panelBotones, BorderLayout.EAST);

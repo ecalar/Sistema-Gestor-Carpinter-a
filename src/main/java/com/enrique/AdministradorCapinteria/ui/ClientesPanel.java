@@ -56,6 +56,13 @@ public class ClientesPanel extends JPanel {
         btnEliminar = new JButton("Eliminar");
         btnActualizar = new JButton("Actualizar");
 
+        //Tooltips
+        btnAgregar.setToolTipText("Agregar nuevo cliente al sistema");
+        btnEditar.setToolTipText("Editar cliente seleccionado");
+        btnEditar.setToolTipText("Selecciona un cliente de la tabla para editar");
+        btnEliminar.setToolTipText("Eliminar cliente seleccionado permanentemente");
+        btnActualizar.setToolTipText("Refrescar lista de clientes");
+
         panelBotones.add(btnAgregar);
         panelBotones.add(btnEditar);
         panelBotones.add(btnEliminar);

@@ -27,10 +27,19 @@ public class MaterialesPanel extends JPanel {
         setLayout(new BorderLayout());
         Estilos.aplicarEstiloPanelMOderno(this);
 
+        JPanel panelSuperior = new JPanel(new BorderLayout());
+        panelSuperior.setBackground(Estilos.COLOR_FONDO);
+
         //Titulo
         JLabel titulo = new JLabel("GESTIÓN DE INVENTARIO", SwingConstants.CENTER);
         Estilos.aplicarEstiloTitulo(titulo);
-        add(titulo, BorderLayout.NORTH);
+        titulo.setFont(new Font("Arial", Font.BOLD, 20));
+        titulo.setBorder(BorderFactory.createEmptyBorder(15, 0, 10, 0));
+        panelSuperior.add(titulo, BorderLayout.NORTH);
+
+        JPanel panelControles = new JPanel(new BorderLayout());
+        panelControles.setBackground(Estilos.COLOR_FONDO);
+        panelControles.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
 
         //Panelde busqueda
         JPanel panelBusqueda = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
@@ -40,17 +49,11 @@ public class MaterialesPanel extends JPanel {
         Estilos.aplicarEstiloTextField(txtBusqueda);
         panelBusqueda.add(txtBusqueda);
         btnBuscar = new JButton("Buscar");
-        Estilos.aplicarEstiloBotonSecundario(btnBuscar);
+        Estilos.aplicarEstiloBotonModerno(btnBuscar);
         panelBusqueda.add(btnBuscar);
 
-        //Panel botones superior
-        JPanel panelSuperior = new JPanel(new BorderLayout());
-        panelSuperior.setBackground(Estilos.COLOR_FONDO);
-        panelSuperior.add(panelBusqueda, BorderLayout.WEST);
-        add(panelSuperior, BorderLayout.NORTH);
-
         //Panel botones
-        JPanel panelBotones = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+        JPanel panelBotones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
         panelBotones.setBackground(Estilos.COLOR_FONDO);
 
         btnAgregar = new JButton("Agregar");
@@ -68,33 +71,29 @@ public class MaterialesPanel extends JPanel {
         panelBotones.add(btnEliminar);
         panelBotones.add(btnActualizar);
 
-        panelSuperior.add(panelBotones,BorderLayout.CENTER);
+        panelControles.add(panelBusqueda, BorderLayout.WEST);
+        panelControles.add(panelBotones, BorderLayout.EAST);
 
+        //Panel botones superior
+        panelSuperior.add(panelControles, BorderLayout.CENTER);
+        add(panelSuperior, BorderLayout.NORTH);
 
         //Crear Tabla
-          String[] columnNames = {"Nº", "ID", "NOMBRE", "TIPO", "STOCK", "UNIDAD"};
-          tableModel = new DefaultTableModel(columnNames, 0) {
-              @Override
-              public boolean isCellEditable(int row, int column) {
-                  return false;
-              }
-          };
-          tablaMateriales = new JTable(tableModel);
-          Estilos.aplicarEstiloTabla(tablaMateriales);
-
-
+        String[] columnNames = {"Nº", "ID", "NOMBRE", "TIPO", "STOCK", "UNIDAD"};
+        tableModel = new DefaultTableModel(columnNames, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        tablaMateriales = new JTable(tableModel);
+        Estilos.aplicarEstiloTabla(tablaMateriales);
 
         //Panel tabla scroll
         JScrollPane scrollPane = new JScrollPane(tablaMateriales);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        //Panel central con tabla y botones
-        JPanel panelCentral = new JPanel(new BorderLayout(10, 10));
-        panelCentral.setBackground(Estilos.COLOR_FONDO);
-        panelCentral.add(scrollPane, BorderLayout.CENTER);
-        panelCentral.add(panelBotones, BorderLayout.SOUTH);
-        panelCentral.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        add(panelCentral, BorderLayout.CENTER);
+        add(scrollPane, BorderLayout.CENTER);
 
         //Eventos
         btnAgregar.addActionListener(e -> abrirFormularioAgregar());

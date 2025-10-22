@@ -30,31 +30,35 @@ public class CalendarioPanel extends JPanel {
         setLayout(new BorderLayout());
         Estilos.aplicarEstiloPanelMOderno(this);
 
+        JPanel panelSuperior = new JPanel(new BorderLayout());
+        panelSuperior.setBackground(Estilos.COLOR_FONDO);
+
         //Titulo
         JLabel titulo = new JLabel("CALENDARIO DE ENTREGAS", SwingConstants.CENTER);
         Estilos.aplicarEstiloTitulo(titulo);
-        titulo.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
-        add(titulo, BorderLayout.NORTH);
+        titulo.setFont(new Font("Arial", Font.BOLD, 20));
+        titulo.setBorder(BorderFactory.createEmptyBorder(15, 0, 10, 0));
+        panelSuperior.add(titulo, BorderLayout.NORTH);
 
         //Panel controles (Mes y Año)
         JPanel panelControles = new JPanel(new BorderLayout());
         panelControles.setBackground(Estilos.COLOR_FONDO);
-        panelControles.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        panelControles.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
 
         //Botones de navegación
-        JPanel panelNavegacion = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        JPanel panelNavegacion = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
         panelNavegacion.setBackground(Estilos.COLOR_FONDO);
         btnAnterior = new JButton("<-Anterior");
         btnHoy = new JButton("Hoy");
         btnSiguiente = new JButton("Siguiente->");
 
-        Estilos.aplicarEstiloBotonSecundario(btnAnterior);
-        Estilos.aplicarEstiloBotonModerno(btnHoy);
-        Estilos.aplicarEstiloBotonSecundario(btnSiguiente);
-
         panelNavegacion.add(btnAnterior);
         panelNavegacion.add(btnHoy);
         panelNavegacion.add(btnSiguiente);
+
+        Estilos.aplicarEstiloBotonModerno(btnAnterior);
+        Estilos.aplicarEstiloBotonModerno(btnHoy);
+        Estilos.aplicarEstiloBotonModerno(btnSiguiente);
 
         //Label del mes y año
         lblMesAnio = new JLabel("", SwingConstants.CENTER);
@@ -63,12 +67,17 @@ public class CalendarioPanel extends JPanel {
 
         panelControles.add(panelNavegacion, BorderLayout.WEST);
         panelControles.add(lblMesAnio, BorderLayout.CENTER);
-        add(panelControles, BorderLayout.NORTH);
+
+        panelSuperior.add(panelControles, BorderLayout.CENTER);
+
+        add(panelSuperior, BorderLayout.NORTH);
 
         //Panel calendario
         panelCalendario = new JPanel(new GridLayout(0, 7, 2, 2));
         panelCalendario.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        panelCalendario.setBackground(Color.WHITE);
         JScrollPane scrollPane = new JScrollPane(panelCalendario);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
         add(scrollPane, BorderLayout.CENTER);
 
         //Eventos

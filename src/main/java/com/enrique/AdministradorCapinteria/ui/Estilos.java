@@ -24,20 +24,30 @@ public class Estilos {
     );
     //Estilizar componentes
     public static void aplicarEstiloBotonModerno(JButton boton) {
+        if (boton == null) return;
+
         boton.setFont(new Font("Segoe UI", Font.BOLD, 12));
         boton.setBackground(COLOR_PRIMARIO);
-        boton.setBackground(Color.WHITE);
+        boton.setForeground(Color.WHITE);
         boton.setBorder(BORDE_REDONDEADO);
         boton.setFocusPainted(false);
         boton.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
         //Efecto hover
         boton.addMouseListener(new java.awt.event.MouseAdapter() {
+            private final Color colorOriginal = COLOR_PRIMARIO;
+            private final Color colorHover = COLOR_SECUNDARIO;
             public void mouseEntered(java.awt.event.MouseEvent evt) {
-                boton.setBackground(COLOR_SECUNDARIO);
+                boton.setBackground(colorHover);
             }
             public void mouseExited(java.awt.event.MouseEvent evt) {
-                boton.setBackground(COLOR_PRIMARIO);
+                boton.setBackground(colorOriginal);
+            }
+            public void mousePressed(java.awt.event.MouseEvent evt) {
+                boton.setBackground(colorHover.darker());
+            }
+            public void mouseReleased(java.awt.event.MouseEvent evt) {
+                boton.setBackground(colorHover);
             }
         });
     }
@@ -95,5 +105,17 @@ public class Estilos {
                 BorderFactory.createLineBorder(new Color(200, 200, 200), 1),
                         BorderFactory.createEmptyBorder(6, 10, 6, 10)
         ));
+    }
+    public static void aplicarEstiloBotonDeshabilitado(JButton boton) {
+        if (boton == null) return;
+
+        boton.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        boton.setBackground(new Color(200, 200, 200));
+        boton.setForeground(new Color(150, 150, 150));
+        boton.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(180, 180, 180), 1),
+                BorderFactory.createEmptyBorder(8, 12, 8, 12)
+        ));
+        boton.setCursor(new Cursor(Cursor.DEFAULT_CURSOR));
     }
 }
